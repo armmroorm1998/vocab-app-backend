@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsEnum,
   IsInt,
+  IsArray,
   Min,
   Max,
   MinLength,
@@ -22,8 +23,10 @@ export class CreateVocabularyDto {
   meaning: string;
 
   @IsOptional()
-  @IsString()
-  example?: string;
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(2000, { each: true })
+  examples?: string[];
 
   @IsOptional()
   @IsString()
@@ -53,8 +56,10 @@ export class UpdateVocabularyDto {
   meaning?: string;
 
   @IsOptional()
-  @IsString()
-  example?: string;
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(2000, { each: true })
+  examples?: string[];
 
   @IsOptional()
   @IsString()
@@ -105,4 +110,10 @@ export class RandomVocabularyDto {
   @IsOptional()
   @IsEnum(EPartOfSpeech)
   partOfSpeech?: EPartOfSpeech;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Type(() => Number)
+  excludeIds?: number[];
 }

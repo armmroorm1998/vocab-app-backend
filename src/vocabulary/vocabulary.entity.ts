@@ -4,6 +4,9 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 
 export enum EPartOfSpeech {
@@ -29,13 +32,18 @@ export class Vocabulary {
   @Column({ type: 'text' })
   meaning: string;
 
-  @Column({ type: 'text', nullable: true })
-  example: string | null;
+  @OneToMany(() => VocabularyExample, (ex) => ex.vocabulary, { cascade: true })
+  examples: VocabularyExample[];
 
-  @Column({ name: 'pronunciation_thai', length: 255, nullable: true })
+  @Column({
+    name: 'pronunciation_thai',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
   pronunciationThai: string | null;
 
-  @Column({ name: 'ipa', length: 255, nullable: true })
+  @Column({ name: 'ipa', type: 'varchar', length: 255, nullable: true })
   ipa: string | null;
 
   @Column({
@@ -51,4 +59,20 @@ export class Vocabulary {
 
   @UpdateDateColumn({ name: 'updated_date' })
   updatedDate: Date;
+}
+
+@Entity('vocabulary_examples')
+export class VocabularyExample {
+  @PrimaryGeneratedColumn('increment')
+  id: number;
+
+  @Column({ type: 'text' })
+  sentence: string;
+
+  @ManyToOne(() => Vocabulary, (v) => v.examples, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'vocabulary_id' })
+  vocabulary: Vocabulary;
+
+  @CreateDateColumn({ name: 'created_date' })
+  createdDate: Date;
 }

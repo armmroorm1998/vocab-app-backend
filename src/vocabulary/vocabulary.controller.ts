@@ -56,13 +56,25 @@ export class VocabularyController {
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const data = await this.service.findOne(id);
-    return { statusCode: HttpStatus.OK, success: true, message: '', total: null, body: data };
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      message: '',
+      total: null,
+      body: data,
+    };
   }
 
   @Post()
   async create(@Body() dto: CreateVocabularyDto) {
     const data = await this.service.create(dto);
-    return { statusCode: HttpStatus.CREATED, success: true, message: 'Created', total: null, body: data };
+    return {
+      statusCode: HttpStatus.CREATED,
+      success: true,
+      message: 'Created',
+      total: null,
+      body: data,
+    };
   }
 
   @Put(':id')
@@ -71,13 +83,25 @@ export class VocabularyController {
     @Body() dto: UpdateVocabularyDto,
   ) {
     const data = await this.service.update(id, dto);
-    return { statusCode: HttpStatus.OK, success: true, message: 'Updated', total: null, body: data };
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      message: 'Updated',
+      total: null,
+      body: data,
+    };
   }
 
   @Delete(':id')
   async remove(@Param('id', ParseIntPipe) id: number) {
     await this.service.remove(id);
-    return { statusCode: HttpStatus.OK, success: true, message: 'Deleted', total: null, body: null };
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      message: 'Deleted',
+      total: null,
+      body: null,
+    };
   }
 
   @Post('import/csv')
@@ -101,7 +125,8 @@ export class VocabularyController {
     }),
   )
   async importCsv(@UploadedFile() file: Express.Multer.File) {
-    if (!file) throw new BadRequestException('CSV file is required (field name: file)');
+    if (!file)
+      throw new BadRequestException('CSV file is required (field name: file)');
     const result = await this.service.importCsv(file.buffer);
     return {
       statusCode: HttpStatus.OK,
