@@ -23,10 +23,6 @@ export class VerbForm {
   @Column({ name: 'v3', length: 255 })
   v3!: string;
 
-  /** 'regular' | 'irregular' */
-  @Column({ name: 'verb_type', type: 'varchar', length: 50 })
-  verbType!: string;
-
   @CreateDateColumn({ name: 'created_date' })
   createdDate!: Date;
 

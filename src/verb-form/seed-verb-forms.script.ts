@@ -150,7 +150,6 @@ async function main(): Promise<void> {
           meaning: original?.meaning ?? r.word,
           v2: r.v2,
           v3: r.v3,
-          verbType: r.type,
         });
       });
 
