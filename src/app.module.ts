@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VocabularyModule } from './vocabulary/vocabulary.module';
+import { VerbFormModule } from './verb-form/verb-form.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { VocabularyModule } from './vocabulary/vocabulary.module';
       }),
     }),
     VocabularyModule,
+    VerbFormModule,
   ],
 })
 export class AppModule {}
