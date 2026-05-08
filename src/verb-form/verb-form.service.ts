@@ -13,6 +13,16 @@ export class VerbFormService {
     private readonly repo: Repository<VerbForm>,
   ) {}
 
+  async findAll(page: number, limit: number): Promise<[VerbForm[], number]> {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+    return this.repo.findAndCount({
+      order: { word: 'ASC' },
+      skip: (safePage - 1) * safeLimit,
+      take: safeLimit,
+    });
+  }
+
   async findRandom(limit: number): Promise<VerbForm[]> {
     // Clamp limit to prevent excessive DB load
     const safeLimit = Math.min(Math.max(1, limit), 50);

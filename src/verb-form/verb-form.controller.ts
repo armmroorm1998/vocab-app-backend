@@ -14,6 +14,21 @@ import { IsOptional, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { VerbFormService } from './verb-form.service';
 
+class ListVerbFormQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
 class RandomVerbFormQueryDto {
   @IsOptional()
   @Type(() => Number)
@@ -68,6 +83,21 @@ export class VerbFormController {
         skipped: result.skipped,
         errors: result.errors,
       },
+    };
+  }
+
+  @Get()
+  async findAll(@Query() query: ListVerbFormQueryDto) {
+    const [data, total] = await this.service.findAll(
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      message: '',
+      total,
+      body: data,
     };
   }
 
