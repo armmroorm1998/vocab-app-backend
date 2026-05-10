@@ -21,6 +21,7 @@ import {
   UpdateVocabularyDto,
   QueryVocabularyDto,
   RandomVocabularyDto,
+  FillBlankQueryDto,
 } from './vocabulary.dto';
 
 @Controller('vocabularies')
@@ -37,6 +38,18 @@ export class VocabularyController {
       total,
       page,
       limit,
+      body: data,
+    };
+  }
+
+  @Get('fill-blank')
+  async findFillBlank(@Query() query: FillBlankQueryDto) {
+    const data = await this.service.findFillBlank(query.limit ?? 10);
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      message: '',
+      total: data.length,
       body: data,
     };
   }

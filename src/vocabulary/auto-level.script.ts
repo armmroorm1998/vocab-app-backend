@@ -1,7 +1,9 @@
 /**
- * Seed script: fetch all verbs from DB → call Gemini → save V1/V2/V3 to verb_forms table.
+ * Auto-level script:
+ *   Fetch vocabularies without a CEFR level → batch-send to Gemini →
+ *   update each vocabulary's cefr_level in DB.
  *
- * Run: npm run seed:verb-forms
+ * Run: npm run auto-level
  *
  * Requirements:
  *   - GEMINI_API_KEY in .env
@@ -9,13 +11,13 @@
  */
 import 'reflect-metadata';
 import * as dotenv from 'dotenv';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import {
   Vocabulary,
   VocabularyExample,
-  EPartOfSpeech,
+  ECefrLevel,
 } from '../vocabulary/vocabulary.entity';
-import { VerbForm } from './verb-form.entity';
+import { Category } from '../category/category.entity';
 
 dotenv.config();
 
@@ -28,40 +30,48 @@ if (!GEMINI_API_KEY) {
 }
 
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-const BATCH_SIZE = 50; // verbs per Gemini request
-const BATCH_DELAY_MS = 2000; // wait between batches to respect rate limits
+const BATCH_SIZE = 50;
+const BATCH_DELAY_MS = 2000;
+
+const VALID_LEVELS = Object.values(ECefrLevel) as string[];
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface GeminiVerbResult {
-  word: string;
-  v2: string;
-  v3: string;
-  type: 'regular' | 'irregular';
+interface GeminiLevelResult {
+  id: number;
+  level: string; // A1 | A2 | B1 | B2 | C1 | C2
 }
 
 // ─── Gemini helper ───────────────────────────────────────────────────────────
 
 async function callGemini(
-  verbs: { word: string; meaning: string }[],
-): Promise<GeminiVerbResult[]> {
-  const prompt = `You are an English grammar assistant.
-For each verb listed below, provide the V2 (simple past) and V3 (past participle) forms, and classify it as "regular" or "irregular".
+  words: { id: number; word: string; meaning: string }[],
+): Promise<GeminiLevelResult[]> {
+  const prompt = `You are an English vocabulary level classifier using the CEFR standard.
+For each word below, classify it as one of: A1, A2, B1, B2, C1, C2.
+
+Guidelines:
+- A1: Most basic everyday words (e.g. cat, eat, big, go)
+- A2: Simple common words (e.g. hospital, always, cheap)
+- B1: Intermediate words used in general conversation (e.g. negotiate, recommend)
+- B2: Upper-intermediate words found in formal/written contexts (e.g. sustainable, implication)
+- C1: Advanced words (e.g. rhetoric, pragmatic, ambiguous)
+- C2: Near-native proficiency words, rare or academic (e.g. ephemeral, soliloquy)
 
 Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
 
-Example output format:
-[{"word":"go","v2":"went","v3":"gone","type":"irregular"},{"word":"walk","v2":"walked","v3":"walked","type":"regular"}]
+Format:
+[{"id": <word_id>, "level": "<A1|A2|B1|B2|C1|C2>"}]
 
-Verbs to process:
-${verbs.map((v, i) => `${i + 1}. ${v.word} (${v.meaning})`).join('\n')}`;
+Words to classify:
+${words.map((w) => `- id: ${w.id}, word: "${w.word}", meaning: "${w.meaning}"`).join('\n')}`;
 
   const response = await fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 2000 },
+      generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
     }),
   });
 
@@ -81,7 +91,7 @@ ${verbs.map((v, i) => `${i + 1}. ${v.word} (${v.meaning})`).join('\n')}`;
     .replace(/\n?```$/, '')
     .trim();
 
-  return JSON.parse(cleaned) as GeminiVerbResult[];
+  return JSON.parse(cleaned) as GeminiLevelResult[];
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -94,81 +104,86 @@ async function main(): Promise<void> {
     username: process.env.DB_USERNAME ?? 'postgres',
     password: process.env.DB_PASSWORD ?? 'postgres',
     database: process.env.DB_NAME ?? 'vocab_app_db',
-    entities: [Vocabulary, VocabularyExample, VerbForm],
-    synchronize: true, // creates verb_forms table if it doesn't exist yet
+    entities: [Vocabulary, VocabularyExample, Category],
+    synchronize: false,
     logging: false,
   });
 
   await dataSource.initialize();
   console.log('✅  Connected to DB');
 
-  const verbRepo: Repository<Vocabulary> = dataSource.getRepository(Vocabulary);
-  const verbFormRepo: Repository<VerbForm> = dataSource.getRepository(VerbForm);
+  const vocabRepo: Repository<Vocabulary> =
+    dataSource.getRepository(Vocabulary);
 
-  // Fetch every verb from vocabularies table
-  const allVerbs = await verbRepo.find({
-    where: { partOfSpeech: EPartOfSpeech.VERB },
+  // Fetch only vocabularies that have no CEFR level yet
+  const allVocabs = await vocabRepo.find({
+    where: { cefrLevel: IsNull() },
     select: { id: true, word: true, meaning: true },
+    order: { id: 'ASC' },
   });
-  console.log(`📚  Found ${allVerbs.length} verbs in vocabularies table`);
 
-  if (allVerbs.length === 0) {
+  console.log(
+    `📚  Found ${allVocabs.length} vocabularies without a CEFR level`,
+  );
+
+  if (allVocabs.length === 0) {
     console.log(
-      '⚠️   No verbs found. Add vocabulary data with part_of_speech = "verb" first.',
+      '✅  All vocabularies already have a CEFR level. Nothing to do.',
     );
     await dataSource.destroy();
     return;
   }
 
-  // Clear previous seed data
-  await verbFormRepo.clear();
-  console.log('🗑️   Cleared existing verb_forms table');
-
-  // Process in batches
-  const batchCount = Math.ceil(allVerbs.length / BATCH_SIZE);
-  let totalSaved = 0;
+  const batchCount = Math.ceil(allVocabs.length / BATCH_SIZE);
+  let totalUpdated = 0;
+  let totalSkipped = 0;
   let totalFailed = 0;
 
   for (let i = 0; i < batchCount; i++) {
-    const batch = allVerbs.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+    const batch = allVocabs.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
     console.log(
-      `\n🔄  Batch ${i + 1}/${batchCount} — processing ${batch.length} verbs...`,
+      `\n🔄  Batch ${i + 1}/${batchCount} — ${batch.length} words...`,
     );
 
     try {
-      const results = await callGemini(
-        batch.map((v) => ({ word: v.word, meaning: v.meaning })),
-      );
+      const results = await callGemini(batch);
 
-      const entities = results.map((r) => {
-        // Match meaning from original DB row (case-insensitive)
-        const original = batch.find(
-          (v) => v.word.toLowerCase() === r.word.toLowerCase(),
-        );
-        return verbFormRepo.create({
-          word: r.word,
-          meaning: original?.meaning ?? r.word,
-          v2: r.v2,
-          v3: r.v3,
+      for (const result of results) {
+        const vocab = batch.find((v) => v.id === result.id);
+        if (!vocab) {
+          console.warn(`   ⚠️  id ${result.id} not found in batch — skipped`);
+          totalSkipped++;
+          continue;
+        }
+
+        const level = result.level?.toUpperCase?.() ?? '';
+        if (!VALID_LEVELS.includes(level)) {
+          console.warn(
+            `   ⚠️  "${vocab.word}" → unknown level "${result.level}" — skipped`,
+          );
+          totalSkipped++;
+          continue;
+        }
+
+        // Parameterized update — safe from SQL injection
+        await vocabRepo.update(vocab.id, {
+          cefrLevel: level as ECefrLevel,
         });
-      });
-
-      await verbFormRepo.save(entities);
-      totalSaved += entities.length;
-      console.log(`   ✅  Saved ${entities.length} verb forms`);
+        console.log(`   ✅  "${vocab.word}" → ${level}`);
+        totalUpdated++;
+      }
     } catch (err) {
       console.error(`   ❌  Batch ${i + 1} failed:`, err);
       totalFailed += batch.length;
     }
 
-    // Respect Gemini rate limits between batches
     if (i < batchCount - 1) {
       await new Promise<void>((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
     }
   }
 
   console.log(
-    `\n🎉  Done! Saved: ${totalSaved}  |  Failed: ${totalFailed}  |  Total verbs: ${allVerbs.length}`,
+    `\n🎉  Done! Updated: ${totalUpdated}  |  Skipped (invalid): ${totalSkipped}  |  Failed: ${totalFailed}`,
   );
 
   await dataSource.destroy();

@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VocabularyModule } from './vocabulary/vocabulary.module';
 import { VerbFormModule } from './verb-form/verb-form.module';
+import { CategoryModule } from './category/category.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { VerbFormModule } from './verb-form/verb-form.module';
     }),
     VocabularyModule,
     VerbFormModule,
+    CategoryModule,
   ],
 })
 export class AppModule {}

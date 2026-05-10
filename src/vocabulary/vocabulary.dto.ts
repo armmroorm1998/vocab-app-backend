@@ -10,7 +10,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { EPartOfSpeech } from './vocabulary.entity';
+import { EPartOfSpeech, ECefrLevel } from './vocabulary.entity';
 
 export class CreateVocabularyDto {
   @IsString()
@@ -41,6 +41,16 @@ export class CreateVocabularyDto {
   @IsOptional()
   @IsEnum(EPartOfSpeech)
   partOfSpeech?: EPartOfSpeech;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  categoryId?: number | null;
+
+  @IsOptional()
+  @IsEnum(ECefrLevel)
+  cefrLevel?: ECefrLevel | null;
 }
 
 export class UpdateVocabularyDto {
@@ -74,6 +84,16 @@ export class UpdateVocabularyDto {
   @IsOptional()
   @IsEnum(EPartOfSpeech)
   partOfSpeech?: EPartOfSpeech;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  categoryId?: number | null;
+
+  @IsOptional()
+  @IsEnum(ECefrLevel)
+  cefrLevel?: ECefrLevel | null;
 }
 
 export class QueryVocabularyDto {
@@ -84,6 +104,16 @@ export class QueryVocabularyDto {
   @IsOptional()
   @IsEnum(EPartOfSpeech)
   partOfSpeech?: EPartOfSpeech;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  categoryId?: number;
+
+  @IsOptional()
+  @IsEnum(ECefrLevel)
+  cefrLevel?: ECefrLevel;
 
   @IsOptional()
   @Type(() => Number)
@@ -116,4 +146,13 @@ export class RandomVocabularyDto {
   @IsInt({ each: true })
   @Type(() => Number)
   excludeIds?: number[];
+}
+
+export class FillBlankQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limit?: number;
 }
