@@ -18,6 +18,7 @@ import {
   QueryVocabularyDto,
   RandomVocabularyDto,
 } from './vocabulary.dto';
+import { Category } from '../category/category.entity';
 
 const VALID_POS = Object.values(EPartOfSpeech) as string[];
 
@@ -28,6 +29,8 @@ export class VocabularyService {
     private readonly repo: Repository<Vocabulary>,
     @InjectRepository(VocabularyExample)
     private readonly exampleRepo: Repository<VocabularyExample>,
+    @InjectRepository(Category)
+    private readonly categoryRepo: Repository<Category>,
   ) {}
 
   async findAll(query: QueryVocabularyDto) {
@@ -35,25 +38,35 @@ export class VocabularyService {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
+    const categoryFilter = query.categoryId
+      ? { category: { id: query.categoryId } }
+      : {};
+    const posFilter = query.partOfSpeech
+      ? { partOfSpeech: query.partOfSpeech }
+      : {};
+    const levelFilter = query.cefrLevel ? { cefrLevel: query.cefrLevel } : {};
+
     const where: object[] | object = query.search
       ? [
           {
             word: ILike(`%${query.search}%`),
-            ...(query.partOfSpeech ? { partOfSpeech: query.partOfSpeech } : {}),
+            ...posFilter,
+            ...categoryFilter,
+            ...levelFilter,
           },
           {
             meaning: ILike(`%${query.search}%`),
-            ...(query.partOfSpeech ? { partOfSpeech: query.partOfSpeech } : {}),
+            ...posFilter,
+            ...categoryFilter,
+            ...levelFilter,
           },
         ]
-      : query.partOfSpeech
-        ? { partOfSpeech: query.partOfSpeech }
-        : {};
+      : { ...posFilter, ...categoryFilter, ...levelFilter };
 
     const [data, total] = await this.repo.findAndCount({
       where,
       order: { createdDate: 'DESC' },
-      relations: { examples: true },
+      relations: { examples: true, category: true },
       skip,
       take: limit,
     });
@@ -100,7 +113,7 @@ export class VocabularyService {
   async findOne(id: number): Promise<Vocabulary> {
     const vocab = await this.repo.findOne({
       where: { id },
-      relations: { examples: true },
+      relations: { examples: true, category: true },
     });
     if (!vocab) throw new NotFoundException(`Vocabulary #${id} not found`);
     return vocab;
@@ -108,14 +121,22 @@ export class VocabularyService {
 
   async create(dto: CreateVocabularyDto): Promise<Vocabulary> {
     const examples = dto.examples;
-    const rest = {
+    const vocab = this.repo.create({
       word: dto.word,
       meaning: dto.meaning,
       pronunciationThai: dto.pronunciationThai,
       ipa: dto.ipa,
       partOfSpeech: dto.partOfSpeech,
-    };
-    const vocab = this.repo.create(rest);
+      cefrLevel: dto.cefrLevel ?? null,
+    });
+    if (dto.categoryId != null) {
+      const category = await this.categoryRepo.findOne({
+        where: { id: dto.categoryId },
+      });
+      if (!category)
+        throw new NotFoundException(`Category #${dto.categoryId} not found`);
+      vocab.category = category;
+    }
     if (Array.isArray(examples) && examples.length > 0) {
       vocab.examples = examples.map((sentence: string) =>
         this.exampleRepo.create({ sentence }),
@@ -129,14 +150,28 @@ export class VocabularyService {
     const vocab = await this.repo.findOne({ where: { id } });
     if (!vocab) throw new NotFoundException(`Vocabulary #${id} not found`);
     const examples = dto.examples;
-    const rest = {
-      word: dto.word,
-      meaning: dto.meaning,
-      pronunciationThai: dto.pronunciationThai,
-      ipa: dto.ipa,
-      partOfSpeech: dto.partOfSpeech,
-    };
-    Object.assign(vocab, rest);
+    Object.assign(vocab, {
+      ...(dto.word !== undefined && { word: dto.word }),
+      ...(dto.meaning !== undefined && { meaning: dto.meaning }),
+      ...(dto.pronunciationThai !== undefined && {
+        pronunciationThai: dto.pronunciationThai,
+      }),
+      ...(dto.ipa !== undefined && { ipa: dto.ipa }),
+      ...(dto.partOfSpeech !== undefined && { partOfSpeech: dto.partOfSpeech }),
+      ...(dto.cefrLevel !== undefined && { cefrLevel: dto.cefrLevel }),
+    });
+    if (dto.categoryId !== undefined) {
+      if (dto.categoryId === null) {
+        vocab.category = null;
+      } else {
+        const category = await this.categoryRepo.findOne({
+          where: { id: dto.categoryId },
+        });
+        if (!category)
+          throw new NotFoundException(`Category #${dto.categoryId} not found`);
+        vocab.category = category;
+      }
+    }
     await this.repo.save(vocab);
     if (examples !== undefined) {
       // Replace all examples for this vocabulary
@@ -266,5 +301,62 @@ export class VocabularyService {
     if (entities.length > 0) await this.repo.save(entities);
 
     return { imported: entities.length, errors };
+  }
+
+  async findFillBlank(limit: number): Promise<
+    {
+      sentence: string;
+      answer: string;
+      meaning: string;
+      options: string[];
+    }[]
+  > {
+    const safeLimit = Math.min(Math.max(1, limit), 20);
+
+    // Pick random examples that belong to a vocabulary with at least one example
+    const examples = await this.exampleRepo
+      .createQueryBuilder('ex')
+      .innerJoinAndSelect('ex.vocabulary', 'v')
+      .orderBy('RANDOM()')
+      .limit(safeLimit)
+      .getMany();
+
+    if (examples.length === 0) return [];
+
+    // Collect all distinct words to use as distractor pool
+    const usedVocabIds = examples.map((ex) => ex.vocabulary.id);
+    const distractorPool = await this.repo
+      .createQueryBuilder('v')
+      .select(['v.id', 'v.word'])
+      .where('v.id NOT IN (:...usedVocabIds)', { usedVocabIds })
+      .orderBy('RANDOM()')
+      .limit(safeLimit * 4)
+      .getMany();
+
+    return examples.map((ex) => {
+      const answer = ex.vocabulary.word;
+      const meaning = ex.vocabulary.meaning;
+
+      // Replace the word (and inflected forms: plural, past tense, etc.) with ___
+      const blankSentence = ex.sentence.replace(
+        new RegExp(
+          `\\b${answer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\w*`,
+          'i',
+        ),
+        '___',
+      );
+
+      // Pick 3 random distractors from pool
+      const distractors = distractorPool
+        .filter((v) => v.id !== ex.vocabulary.id)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3)
+        .map((v) => v.word);
+
+      // Shuffle options
+      const options = [...distractors, answer].sort(() => Math.random() - 0.5);
+
+      return { sentence: blankSentence, answer, meaning, options };
+    });
   }
 }

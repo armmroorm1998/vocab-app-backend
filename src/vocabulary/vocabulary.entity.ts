@@ -8,6 +8,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+import { Category } from '../category/category.entity';
 
 export enum EPartOfSpeech {
   NOUN = 'noun',
@@ -19,6 +20,15 @@ export enum EPartOfSpeech {
   PRONOUN = 'pronoun',
   PHRASE = 'phrase',
   OTHER = 'other',
+}
+
+export enum ECefrLevel {
+  A1 = 'A1',
+  A2 = 'A2',
+  B1 = 'B1',
+  B2 = 'B2',
+  C1 = 'C1',
+  C2 = 'C2',
 }
 
 @Entity('vocabularies')
@@ -53,6 +63,22 @@ export class Vocabulary {
     default: EPartOfSpeech.OTHER,
   })
   partOfSpeech: EPartOfSpeech;
+
+  @ManyToOne(() => Category, {
+    nullable: true,
+    onDelete: 'SET NULL',
+    eager: false,
+  })
+  @JoinColumn({ name: 'category_id' })
+  category: Category | null;
+
+  @Column({
+    name: 'cefr_level',
+    type: 'enum',
+    enum: ECefrLevel,
+    nullable: true,
+  })
+  cefrLevel: ECefrLevel | null;
 
   @CreateDateColumn({ name: 'created_date' })
   createdDate: Date;
