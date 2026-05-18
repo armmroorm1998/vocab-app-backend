@@ -27,7 +27,7 @@ if (!GEMINI_API_KEY) {
 }
 
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 25;
 const BATCH_DELAY_MS = 2000;
 
 // ─── Types ───────────────────────────────────────────────────────────────────

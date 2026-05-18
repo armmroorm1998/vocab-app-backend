@@ -22,7 +22,8 @@
     "auto-categorize": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/category/auto-categorize.script.ts",
     "auto-level": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/vocabulary/auto-level.script.ts",
     "vocab:stats": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/vocabulary/vocab-stats.script.ts",
-    "vocab:generate": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/vocabulary/generate-vocab.script.ts"
+    "vocab:generate": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/vocabulary/generate-vocab.script.ts",
+    "fill:examples": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/vocabulary/fill-examples.script.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

@@ -7,7 +7,8 @@ services:
     ports:
       - '3001:3001'
     environment:
-      NODE_ENV: development
+      # Prevent data loss: set NODE_ENV=production so TypeORM synchronize=false
+      NODE_ENV: production
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USERNAME: ${DB_USERNAME:-postgres}
