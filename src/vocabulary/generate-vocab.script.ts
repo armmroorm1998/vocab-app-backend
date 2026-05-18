@@ -70,9 +70,7 @@ interface GeminiWord {
   pronunciation_thai: string;
   ipa: string;
   part_of_speech: string;
-  example_easy: string;
-  example_medium: string;
-  example_hard: string;
+  example: string;
 }
 
 // ─── Gemini helper ───────────────────────────────────────────────────────────
@@ -115,17 +113,17 @@ Level ${level} description: ${LEVEL_GUIDE[level]}
 Rules:
 1. Each word must genuinely match CEFR level ${level}
 2. Include nouns, verbs, adjectives, adverbs — a natural mix
-3. Provide all fields: Thai meaning, Thai pronunciation, IPA, part_of_speech, and 3 example sentences
+3. Provide all fields: Thai meaning, Thai pronunciation, IPA, part_of_speech, and 1 example sentence
 4. part_of_speech must be one of: noun, verb, adjective, adverb, preposition, conjunction, pronoun, phrase, other
-5. example_easy: short simple sentence, example_medium: moderate sentence, example_hard: complex or idiomatic sentence
+5. example: a clear, natural sentence that demonstrates the word's meaning at level ${level}
 6. Avoid extremely common/basic words (e.g. eat, drink, sleep, walk, run, big, small, good, bad, like, go, come, see, say, know, get, make, take)
 7. Do NOT include any of these words (already in database): ${exclusionSample || '(none yet)'}
 8. Return ONLY a valid JSON array — no markdown, no explanation, no code fences
 
 Format:
 [
-  {"word": "apple", "meaning_th": "แอปเปิล", "pronunciation_thai": "แอ็พ-เพิล", "ipa": "/ˈæp.əl/", "part_of_speech": "noun", "example_easy": "I eat an apple.", "example_medium": "She eats an apple after lunch.", "example_hard": "An apple a day keeps the doctor away."},
-  {"word": "run", "meaning_th": "วิ่ง", "pronunciation_thai": "รัน", "ipa": "/rʌn/", "part_of_speech": "verb", "example_easy": "I run every day.", "example_medium": "He runs to school when he is late.", "example_hard": "She decided to run for office despite the challenges."}
+  {"word": "apple", "meaning_th": "แอปเปิล", "pronunciation_thai": "แอ็พ-เพิล", "ipa": "/ˈæp.əl/", "part_of_speech": "noun", "example": "She packed an apple in her lunchbox."},
+  {"word": "diverse", "meaning_th": "หลากหลาย", "pronunciation_thai": "ได-เวิร์ส", "ipa": "/daɪˈvɜːrs/", "part_of_speech": "adjective", "example": "The city has a diverse population from many cultures."}
 ]
 
 Generate ${count} words now:`;
@@ -265,13 +263,7 @@ async function main(): Promise<void> {
     const posRaw = String(item.part_of_speech ?? '')
       .trim()
       .toLowerCase();
-    const exampleEasy = String(item.example_easy ?? '')
-      .trim()
-      .slice(0, 2000);
-    const exampleMedium = String(item.example_medium ?? '')
-      .trim()
-      .slice(0, 2000);
-    const exampleHard = String(item.example_hard ?? '')
+    const example = String(item.example ?? '')
       .trim()
       .slice(0, 2000);
 
@@ -292,10 +284,6 @@ async function main(): Promise<void> {
       ? (posRaw as EPartOfSpeech)
       : EPartOfSpeech.OTHER;
 
-    const examples = [exampleEasy, exampleMedium, exampleHard].filter(
-      (s) => s.length > 0,
-    );
-
     const vocab = vocabRepo.create({
       word,
       meaning: meaningTh,
@@ -304,10 +292,12 @@ async function main(): Promise<void> {
       partOfSpeech,
       cefrLevel: TARGET_LEVEL,
     });
-    if (examples.length > 0) {
-      vocab.examples = examples.map((sentence) =>
-        dataSource.getRepository(VocabularyExample).create({ sentence }),
-      );
+    if (example.length > 0) {
+      vocab.examples = [
+        dataSource
+          .getRepository(VocabularyExample)
+          .create({ sentence: example }),
+      ];
     }
     entities.push(vocab);
   }
