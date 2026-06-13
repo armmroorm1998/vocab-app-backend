@@ -5,6 +5,8 @@ import { UserModule } from './user/user.module';
 import { VocabularyModule } from './vocabulary/vocabulary.module';
 import { VerbFormModule } from './verb-form/verb-form.module';
 import { CategoryModule } from './category/category.module';
+import { ConversationQuizModule } from './conversation-quiz/conversation-quiz.module';
+import { ScriptRunnerModule } from './script-runner/script-runner.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { CategoryModule } from './category/category.module';
     VocabularyModule,
     VerbFormModule,
     CategoryModule,
+    ConversationQuizModule,
+    ScriptRunnerModule,
   ],
 })
 export class AppModule {}
