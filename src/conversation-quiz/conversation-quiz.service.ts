@@ -25,6 +25,7 @@ export interface ConversationQuizQuestionResponse {
   choices: string[];
   correctAnswer: string;
   naturalAnswer: string;
+  choiceScores: Record<string, number> | null;
   dialogueLines: ConversationQuizDialogueLine[];
   orderIndex: number;
 }
@@ -76,6 +77,7 @@ export class ConversationQuizService {
       choices: q.choices,
       correctAnswer: q.correctAnswer,
       naturalAnswer: q.naturalAnswer,
+      choiceScores: q.choiceScores ?? null,
       dialogueLines: this.resolveDialogueLines(q),
       orderIndex: q.orderIndex,
     }));

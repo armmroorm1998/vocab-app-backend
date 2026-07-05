@@ -78,6 +78,9 @@ export class ConversationQuizQuestion {
   @Column({ name: 'dialogue_lines', type: 'jsonb', nullable: true })
   dialogueLines: ConversationQuizDialogueLine[] | null;
 
+  @Column({ name: 'choice_scores', type: 'jsonb', nullable: true })
+  choiceScores: Record<string, number> | null;
+
   @Column({ name: 'order_index', type: 'int', default: 0 })
   orderIndex: number;
 

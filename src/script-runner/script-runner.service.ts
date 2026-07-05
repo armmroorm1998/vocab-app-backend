@@ -29,7 +29,11 @@ export class ScriptRunnerService {
 
     const extraArgs = this.buildScriptArgs(dto);
     const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const command = ['run', dto.script, ...(extraArgs.length ? ['--', ...extraArgs] : [])];
+    const command = [
+      'run',
+      dto.script,
+      ...(extraArgs.length ? ['--', ...extraArgs] : []),
+    ];
 
     return new Promise((resolve, reject) => {
       const child = spawn(npmCommand, command, {

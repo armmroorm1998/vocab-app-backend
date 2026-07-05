@@ -19,6 +19,7 @@ type GeneratedQuestion = {
   choices: string[];
   correctAnswer: string;
   naturalAnswer: string;
+  choiceScores: Record<string, number>;
   dialogueLines?: ConversationQuizDialogueLine[];
 };
 
@@ -52,7 +53,13 @@ function buildPrompt(categoryName: string, count: number): string {
     'Avoid jumping to a new topic unless the previous line naturally leads to it.',
     'Each dialogue should include: 1) a natural opener/greeting, 2) the main request or question, 3) the learner response, 4) a follow-up or confirmation, and 5) a natural closing.',
     'Make the flow realistic for the category. For example: travel should include trip context, hotel should include check-in or requests, restaurant should include ordering flow, job interview should include introduction and follow-up.',
-    'All choices should be short realistic sentence responses that fit the specific moment in the conversation.',
+    'All choices must be short realistic sentence responses that all correctly answer the prompt — none should be wrong.',
+    'Assign each choice a naturalness score in choiceScores (object mapping choice text to score 0–3):',
+    '  3 = most natural/fluent (native speaker would say this)',
+    '  2 = natural and good',
+    '  1 = acceptable but less natural or slightly awkward',
+    '  0 = technically understandable but unnatural or too formal/informal',
+    'Exactly one choice must have score 3. The correctAnswer field must equal that highest-scored choice.',
     'naturalAnswer should be a fluent answer, may be same as correctAnswer.',
     'dialogueLines must be 5 to 7 turns.',
     'One dialogueLines turn must contain the exact prompt as spoken by the other person.',
@@ -61,6 +68,7 @@ function buildPrompt(categoryName: string, count: number): string {
     'If a line mentions an object, place, time, or action, the next line should respond to that exact detail.',
     'Each dialogueLines item must contain speaker and text.',
     'Avoid repetitive placeholders and avoid generic lines that could belong to any category.',
+    'Include choiceScores in every question item.',
     'Return JSON object: {"questions":[...]}',
   ].join('\n');
 }
@@ -119,6 +127,24 @@ function normalizeQuestions(input: unknown): GeneratedQuestion[] {
         choices: row.choices.map((c) => String(c).trim()).slice(0, 4),
         correctAnswer: row.correctAnswer.trim(),
         naturalAnswer: row.naturalAnswer.trim(),
+        choiceScores: (() => {
+          const raw = (q as { choiceScores?: unknown }).choiceScores;
+          if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+            const result: Record<string, number> = {};
+            for (const [k, v] of Object.entries(
+              raw as Record<string, unknown>,
+            )) {
+              if (typeof v === 'number') result[k.trim()] = v;
+            }
+            if (Object.keys(result).length > 0) return result;
+          }
+          // Fallback: correctAnswer = 3, others = 1
+          const scores: Record<string, number> = {};
+          for (const c of row.choices) {
+            scores[c.trim()] = c.trim() === row.correctAnswer.trim() ? 3 : 1;
+          }
+          return scores;
+        })(),
         dialogueLines:
           dialogueLines.length >= 4
             ? dialogueLines.slice(0, 6)
@@ -388,6 +414,7 @@ async function main() {
           choices: q.choices,
           correctAnswer: q.correctAnswer,
           naturalAnswer: q.naturalAnswer,
+          choiceScores: q.choiceScores,
           dialogueLines: q.dialogueLines ?? buildFallbackDialogueLines(q),
           orderIndex: existingCount + i + 1,
         }),
