@@ -61,6 +61,9 @@ const REQUEST_COUNT = Math.min(
   Math.max(10, parseInt(getArg('--count') ?? '100', 10)),
   300,
 );
+const TARGET_CATEGORY_ID = getArg('--category-id')
+  ? parseInt(getArg('--category-id')!, 10)
+  : null;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -91,6 +94,7 @@ async function callGemini(
   count: number,
   mustExclude: Set<string>, // always included — words from this run's previous batches
   samplePool: Set<string>, // DB words — randomly sampled to keep prompt short
+  categoryHint?: string, // optional category name to focus word generation
 ): Promise<GeminiWord[]> {
   // Always include mustExclude words, then fill remaining slots with random DB sample
   const poolArray = [...samplePool];
@@ -105,14 +109,18 @@ async function callGemini(
     ', ',
   );
 
+  const categoryLine = categoryHint
+    ? `\nFocus: Generate words related to the topic "${categoryHint}". All words should belong to or be closely related to this category.`
+    : '';
+
   const prompt = `You are an English dictionary and vocabulary expert.
-Generate exactly ${count} English vocabulary words at CEFR level ${level}.
+Generate exactly ${count} English vocabulary words at CEFR level ${level}.${categoryLine}
 
 Level ${level} description: ${LEVEL_GUIDE[level]}
 
 Rules:
 1. Each word must genuinely match CEFR level ${level}
-2. Include nouns, verbs, adjectives, adverbs — a natural mix
+2. ${categoryHint ? `All words must be related to "${categoryHint}"` : 'Include nouns, verbs, adjectives, adverbs — a natural mix'}
 3. Provide all fields: Thai meaning, Thai pronunciation, IPA, part_of_speech, and 1 example sentence
 4. part_of_speech must be one of: noun, verb, adjective, adverb, preposition, conjunction, pronoun, phrase, other
 5. example: a clear, natural sentence that demonstrates the word's meaning at level ${level}
@@ -176,6 +184,21 @@ async function main(): Promise<void> {
 
   await dataSource.initialize();
   console.log('✅  Connected to DB');
+
+  // Resolve category if --category-id provided
+  let targetCategory: Category | null = null;
+  if (TARGET_CATEGORY_ID !== null) {
+    targetCategory = await dataSource
+      .getRepository(Category)
+      .findOne({ where: { id: TARGET_CATEGORY_ID } });
+    if (!targetCategory) {
+      console.error(`❌  Category id=${TARGET_CATEGORY_ID} not found in DB`);
+      await dataSource.destroy();
+      process.exit(1);
+    }
+    console.log(`📂  Category: [${targetCategory.id}] ${targetCategory.name}`);
+  }
+
   console.log(
     `🎯  Generating ${REQUEST_COUNT} words at level ${TARGET_LEVEL}...`,
   );
@@ -226,6 +249,7 @@ async function main(): Promise<void> {
         batchSize,
         generatedSoFar,
         existingWords,
+        targetCategory?.name,
       );
       allGeminiWords.push(...batch);
       console.log(`   ✅  Got ${batch.length} words`);
@@ -291,6 +315,7 @@ async function main(): Promise<void> {
       pronunciationThai: pronunciationThai || null,
       partOfSpeech,
       cefrLevel: TARGET_LEVEL,
+      ...(targetCategory ? { category: targetCategory } : {}),
     });
     if (example.length > 0) {
       vocab.examples = [
@@ -314,8 +339,10 @@ async function main(): Promise<void> {
   console.log(`\n🎉  Done!`);
   console.log(`   Inserted : ${entities.length}`);
   console.log(`   Skipped  : ${skipped}`);
-  console.log(`\n💡  Run next:`);
-  console.log(`   npm run auto-categorize   → assign categories`);
+  if (!targetCategory) {
+    console.log(`\n💡  Run next:`);
+    console.log(`   npm run auto-categorize   → assign categories`);
+  }
 
   await dataSource.destroy();
 }
