@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsInt,
   IsArray,
+  IsBoolean,
   Min,
   Max,
   MinLength,
@@ -154,5 +155,48 @@ export class FillBlankQueryDto {
   @IsInt()
   @Min(1)
   @Max(20)
+  limit?: number;
+}
+
+export class ReviewQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
+}
+
+export class RecordReviewDto {
+  @IsBoolean()
+  correct: boolean;
+}
+
+export class SubmitQuizAnswerDto {
+  @IsString()
+  selectedAnswer: string;
+}
+
+export class WeakWordsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limit?: number;
+}
+
+export class PaginationQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
   limit?: number;
 }

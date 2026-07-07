@@ -12,7 +12,10 @@
 import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import { DataSource, IsNull } from 'typeorm';
-import { ConversationQuizCategory, ConversationQuizQuestion } from './conversation-quiz.entity';
+import {
+  ConversationQuizCategory,
+  ConversationQuizQuestion,
+} from './conversation-quiz.entity';
 
 dotenv.config();
 
@@ -97,7 +100,10 @@ function parseScorePayload(rawText: string): ScoreResult[] {
             typeof (r as { choiceScores?: unknown }).choiceScores === 'object',
         )
         .map((r) => {
-          const row = r as { id: number; choiceScores: Record<string, unknown> };
+          const row = r as {
+            id: number;
+            choiceScores: Record<string, unknown>;
+          };
           const choiceScores: Record<string, number> = {};
           for (const [k, v] of Object.entries(row.choiceScores)) {
             if (typeof v === 'number') choiceScores[k] = v;
@@ -131,7 +137,10 @@ async function callGemini(prompt: string): Promise<string> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: 'application/json',
+        },
       }),
     });
 
@@ -146,7 +155,8 @@ async function callGemini(prompt: string): Promise<string> {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error(`Gemini returned empty content for model ${model}`);
+    if (!text)
+      throw new Error(`Gemini returned empty content for model ${model}`);
     return text;
   }
 
@@ -167,7 +177,10 @@ async function callOpenAI(prompt: string): Promise<string> {
       model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
       temperature: 0.2,
       messages: [
-        { role: 'system', content: 'You are an expert English conversation teacher.' },
+        {
+          role: 'system',
+          content: 'You are an expert English conversation teacher.',
+        },
         { role: 'user', content: prompt },
       ],
       response_format: { type: 'json_object' },
@@ -228,7 +241,9 @@ async function main() {
   });
 
   if (nullQuestions.length === 0) {
-    console.log('✅ No questions with null choice_scores found. Nothing to do.');
+    console.log(
+      '✅ No questions with null choice_scores found. Nothing to do.',
+    );
     await dataSource.destroy();
     return;
   }
@@ -245,7 +260,9 @@ async function main() {
     const batchNum = Math.floor(i / batchSize) + 1;
     const totalBatches = Math.ceil(nullQuestions.length / batchSize);
 
-    console.log(`Batch ${batchNum}/${totalBatches}: processing question ids [${batch.map((q) => q.id).join(', ')}]`);
+    console.log(
+      `Batch ${batchNum}/${totalBatches}: processing question ids [${batch.map((q) => q.id).join(', ')}]`,
+    );
 
     let results: ScoreResult[];
     try {
@@ -264,7 +281,9 @@ async function main() {
     for (const q of batch) {
       const scores = resultMap.get(q.id);
       if (!scores) {
-        console.warn(`  ⚠️  No scores returned for question id ${q.id} — skipping`);
+        console.warn(
+          `  ⚠️  No scores returned for question id ${q.id} — skipping`,
+        );
         failed++;
         continue;
       }
@@ -286,9 +305,7 @@ async function main() {
     }
   }
 
-  console.log(
-    `\nDone. Updated: ${updated}, Failed: ${failed}`,
-  );
+  console.log(`\nDone. Updated: ${updated}, Failed: ${failed}`);
 
   await dataSource.destroy();
 }

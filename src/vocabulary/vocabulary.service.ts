@@ -305,6 +305,7 @@ export class VocabularyService {
 
   async findFillBlank(limit: number): Promise<
     {
+      vocabularyId: number;
       sentence: string;
       answer: string;
       meaning: string;
@@ -356,7 +357,13 @@ export class VocabularyService {
       // Shuffle options
       const options = [...distractors, answer].sort(() => Math.random() - 0.5);
 
-      return { sentence: blankSentence, answer, meaning, options };
+      return {
+        vocabularyId: ex.vocabulary.id,
+        sentence: blankSentence,
+        answer,
+        meaning,
+        options,
+      };
     });
   }
 }

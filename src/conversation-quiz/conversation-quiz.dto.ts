@@ -17,3 +17,23 @@ export class ConversationQuizQueryDto {
   @Max(30)
   limit?: number;
 }
+
+export class SubmitAnswerDto {
+  @IsString()
+  selectedChoice: string;
+}
+
+export class HistoryQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
