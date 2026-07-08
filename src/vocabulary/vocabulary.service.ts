@@ -373,7 +373,9 @@ export class VocabularyService {
     });
   }
 
-  async findDictation(limit: number): Promise<
+  async findDictation(
+    limit: number,
+  ): Promise<
     { vocabularyId: number; sentence: string; word: string; meaning: string }[]
   > {
     const safeLimit = Math.min(Math.max(1, limit), 20);
