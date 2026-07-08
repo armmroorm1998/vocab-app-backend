@@ -110,7 +110,9 @@ async function callGemini(
   );
 
   const categoryLine = categoryHint
-    ? `\nFocus: Generate words related to the topic "${categoryHint}". All words should belong to or be closely related to this category.`
+    ? `\nFocus: Generate words whose PRIMARY meaning directly belongs to the category "${categoryHint}".
+Only include words where the core definition is specifically about this topic — not general/academic words that merely appear in that context.
+For example, for "Animals": include "lion", "feather", "hibernate" — but NOT "rehabilitation", "pinnacle", or "encroachment".`
     : '';
 
   const prompt = `You are an English dictionary and vocabulary expert.
@@ -125,6 +127,7 @@ Rules:
 4. part_of_speech must be one of: noun, verb, adjective, adverb, preposition, conjunction, pronoun, phrase, other
 5. example: a clear, natural sentence that demonstrates the word's meaning at level ${level}
 6. Avoid extremely common/basic words (e.g. eat, drink, sleep, walk, run, big, small, good, bad, like, go, come, see, say, know, get, make, take)
+7. ${categoryHint ? `Do NOT include general/academic words that merely relate to "${categoryHint}" — words must primarily and specifically belong to this topic` : 'Avoid topic-specific jargon that only fits one narrow domain'}
 7. Do NOT include any of these words (already in database): ${exclusionSample || '(none yet)'}
 8. Return ONLY a valid JSON array — no markdown, no explanation, no code fences
 

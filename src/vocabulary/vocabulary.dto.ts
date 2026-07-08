@@ -143,6 +143,12 @@ export class RandomVocabularyDto {
   partOfSpeech?: EPartOfSpeech;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  categoryId?: number;
+
+  @IsOptional()
   @IsArray()
   @IsInt({ each: true })
   @Type(() => Number)
@@ -150,6 +156,15 @@ export class RandomVocabularyDto {
 }
 
 export class FillBlankQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limit?: number;
+}
+
+export class DictationQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()

@@ -87,7 +87,13 @@ export class VocabularyService {
 
     if (query.partOfSpeech) {
       // Parameterized query — safe from SQL injection
-      idQb.where('v.part_of_speech = :pos', { pos: query.partOfSpeech });
+      idQb.andWhere('v.part_of_speech = :pos', { pos: query.partOfSpeech });
+    }
+
+    if (query.categoryId) {
+      idQb.andWhere('v.category_id = :categoryId', {
+        categoryId: query.categoryId,
+      });
     }
 
     const rawExclude = query.excludeIds;
@@ -365,5 +371,25 @@ export class VocabularyService {
         options,
       };
     });
+  }
+
+  async findDictation(limit: number): Promise<
+    { vocabularyId: number; sentence: string; word: string; meaning: string }[]
+  > {
+    const safeLimit = Math.min(Math.max(1, limit), 20);
+
+    const examples = await this.exampleRepo
+      .createQueryBuilder('ex')
+      .innerJoinAndSelect('ex.vocabulary', 'v')
+      .orderBy('RANDOM()')
+      .limit(safeLimit)
+      .getMany();
+
+    return examples.map((ex) => ({
+      vocabularyId: ex.vocabulary.id,
+      sentence: ex.sentence,
+      word: ex.vocabulary.word,
+      meaning: ex.vocabulary.meaning,
+    }));
   }
 }

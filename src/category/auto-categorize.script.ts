@@ -12,13 +12,23 @@
  */
 import 'reflect-metadata';
 import * as dotenv from 'dotenv';
-import { DataSource, IsNull, Repository } from 'typeorm';
+import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { Vocabulary, VocabularyExample } from '../vocabulary/vocabulary.entity';
 import { Category } from './category.entity';
 
 dotenv.config();
 
 // ─── Config ──────────────────────────────────────────────────────────────────
+
+// Parse CLI flags
+//   --recategorize          re-classify ALL words (not just uncategorized ones)
+//   --category <name>       limit --recategorize to words in this category only
+const cliArgs = process.argv.slice(2);
+const RECATEGORIZE = cliArgs.includes('--recategorize');
+const CATEGORY_FILTER = (() => {
+  const idx = cliArgs.indexOf('--category');
+  return idx !== -1 ? cliArgs[idx + 1] : null;
+})();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_API_KEY) {
@@ -47,9 +57,22 @@ async function callGemini(
     .map((c) => `- ${c.name}${c.nameTh ? ` (${c.nameTh})` : ''}`)
     .join('\n');
 
-  const prompt = `You are a vocabulary classification assistant.
+  const prompt = `You are a strict vocabulary classification assistant.
 Given the list of English vocabulary words and their Thai meanings, assign each word to the most appropriate category from the list below.
-If a word does not fit any category, use "none".
+
+CRITICAL RULES:
+1. Only assign a category if the word's PRIMARY meaning directly and specifically belongs to that category.
+2. Do NOT assign a category just because the word "can be used in" that context or appears in academic texts about that topic.
+3. General/academic/abstract words that merely relate to a topic must be "none" — even if they sound topically connected.
+4. When in doubt, use "none".
+
+Examples of correct classification:
+- "lion" → Animals  (primary meaning IS the animal)
+- "feather" → Animals  (primary meaning is a body part of a bird)
+- "rehabilitation" → none  (general word; used across medicine, law, etc. — not exclusively Animals)
+- "pinnacle" → none  (general abstract word, not specific to any category)
+- "ecosystem" → none  (environmental science term, not a specific Animals/Nature word in these categories)
+- "encroachment" → none  (legal/environmental term; does not primarily belong to any listed category)
 
 Available categories (use the exact English name):
 ${categoryList}
@@ -130,14 +153,50 @@ async function main(): Promise<void> {
     categories.map((c) => [c.name.toLowerCase(), c]),
   );
 
-  // Fetch only vocabularies that have no category yet
-  const allVocabs = await vocabRepo.find({
-    where: { category: IsNull() },
-    select: { id: true, word: true, meaning: true },
-    order: { id: 'ASC' },
-  });
+  // Determine which vocabularies to process
+  let allVocabs: { id: number; word: string; meaning: string }[];
 
-  console.log(`📚  Found ${allVocabs.length} vocabularies without a category`);
+  if (RECATEGORIZE) {
+    // Re-categorize mode: process words that already have a category
+    if (CATEGORY_FILTER) {
+      const targetCat = await categoryRepo.findOne({
+        where: { name: CATEGORY_FILTER },
+      });
+      if (!targetCat) {
+        console.error(
+          `❌  Category "${CATEGORY_FILTER}" not found. Available: ${categories.map((c) => c.name).join(', ')}`,
+        );
+        await dataSource.destroy();
+        process.exit(1);
+      }
+      console.log(
+        `🔁  Re-categorize mode — category filter: "${CATEGORY_FILTER}"`,
+      );
+      allVocabs = await vocabRepo.find({
+        where: { category: { id: targetCat.id } },
+        select: { id: true, word: true, meaning: true },
+        order: { id: 'ASC' },
+      });
+    } else {
+      console.log('🔁  Re-categorize mode — all categorized words');
+      allVocabs = await vocabRepo.find({
+        where: { category: Not(IsNull()) },
+        select: { id: true, word: true, meaning: true },
+        order: { id: 'ASC' },
+      });
+    }
+    console.log(`📚  Found ${allVocabs.length} vocabularies to re-classify`);
+  } else {
+    // Default mode: only uncategorized words
+    allVocabs = await vocabRepo.find({
+      where: { category: IsNull() },
+      select: { id: true, word: true, meaning: true },
+      order: { id: 'ASC' },
+    });
+    console.log(
+      `📚  Found ${allVocabs.length} vocabularies without a category`,
+    );
+  }
 
   if (allVocabs.length === 0) {
     console.log('✅  All vocabularies are already categorized. Nothing to do.');
@@ -169,8 +228,17 @@ async function main(): Promise<void> {
 
         const categoryName = result.category?.toLowerCase?.() ?? 'none';
         if (categoryName === 'none' || !categoryName) {
-          console.log(`   ⏭  "${vocab.word}" → no matching category`);
-          totalSkipped++;
+          if (RECATEGORIZE) {
+            // In recategorize mode: set category to null (word doesn't belong to any category)
+            await vocabRepo.update(vocab.id, { category: null });
+            console.log(
+              `   🔓  "${vocab.word}" → uncategorized (no primary match)`,
+            );
+            totalUpdated++;
+          } else {
+            console.log(`   ⏭  "${vocab.word}" → no matching category`);
+            totalSkipped++;
+          }
           continue;
         }
 
@@ -198,8 +266,13 @@ async function main(): Promise<void> {
     }
   }
 
+  const modeLabel = RECATEGORIZE
+    ? CATEGORY_FILTER
+      ? `re-categorize "${CATEGORY_FILTER}"`
+      : 're-categorize all'
+    : 'categorize new';
   console.log(
-    `\n🎉  Done! Updated: ${totalUpdated}  |  Skipped (no match): ${totalSkipped}  |  Failed: ${totalFailed}`,
+    `\n🎉  Done [${modeLabel}]! Updated: ${totalUpdated}  |  Skipped (no change): ${totalSkipped}  |  Failed: ${totalFailed}`,
   );
 
   await dataSource.destroy();

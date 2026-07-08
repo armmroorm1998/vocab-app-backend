@@ -26,6 +26,7 @@ import {
   QueryVocabularyDto,
   RandomVocabularyDto,
   FillBlankQueryDto,
+  DictationQueryDto,
   ReviewQueryDto,
   RecordReviewDto,
   SubmitQuizAnswerDto,
@@ -71,6 +72,18 @@ export class VocabularyController {
     };
   }
 
+  @Get('dictation')
+  async findDictation(@Query() query: DictationQueryDto) {
+    const data = await this.service.findDictation(query.limit ?? 10);
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      message: '',
+      total: data.length,
+      body: data,
+    };
+  }
+
   @Get('random')
   async findRandom(@Query() query: RandomVocabularyDto) {
     const data = await this.service.findRandom(query);
@@ -98,6 +111,19 @@ export class VocabularyController {
       success: true,
       message: '',
       total: data.length,
+      body: data,
+    };
+  }
+
+  @Get('progress-stats')
+  @UseGuards(UidAuthGuard)
+  async getProgressStats(@CurrentUser() user: User) {
+    const data = await this.progressService.getProgressStats(user.id);
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      message: '',
+      total: null,
       body: data,
     };
   }

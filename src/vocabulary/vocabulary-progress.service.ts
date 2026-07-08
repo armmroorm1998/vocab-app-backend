@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThanOrEqual, Repository } from 'typeorm';
 import { VocabularyProgress } from './vocabulary-progress.entity';
 import { Vocabulary } from './vocabulary.entity';
 import { UserActivityService } from '../user/user-activity.service';
@@ -124,5 +124,33 @@ export class VocabularyProgressService {
       .getMany();
 
     return [...dueVocab, ...freshVocab];
+  }
+
+  async getProgressStats(userId: string): Promise<{
+    totalReviewed: number;
+    totalMastered: number;
+    accuracy: number;
+    dueToday: number;
+  }> {
+    const rows = await this.progressRepo.find({
+      where: { user: { id: userId } },
+    });
+
+    const totalReviewed = rows.length;
+    const totalMastered = rows.filter(
+      (r) => r.repetitions >= 5 || r.easeFactor >= 3.0,
+    ).length;
+    const totalSeen = rows.reduce((sum, r) => sum + r.timesSeen, 0);
+    const totalCorrect = rows.reduce((sum, r) => sum + r.timesCorrect, 0);
+    const accuracy = totalSeen > 0 ? totalCorrect / totalSeen : 0;
+
+    const dueToday = await this.progressRepo.count({
+      where: {
+        user: { id: userId },
+        nextReviewDate: LessThanOrEqual(new Date()),
+      },
+    });
+
+    return { totalReviewed, totalMastered, accuracy, dueToday };
   }
 }
