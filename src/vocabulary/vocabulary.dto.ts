@@ -201,6 +201,13 @@ export class WeakWordsQueryDto {
   limit?: number;
 }
 
+export class ContributeVocabularyDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  word: string;
+}
+
 export class PaginationQueryDto {
   @IsOptional()
   @Type(() => Number)

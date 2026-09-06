@@ -42,6 +42,8 @@ export class UserController {
         uid: user.uid,
         displayName: user.displayName,
         createdAt: user.createdAt,
+        contributedWordsCount: user.contributedWordsCount,
+        freeAccessUntil: user.freeAccessUntil,
       },
     };
   }

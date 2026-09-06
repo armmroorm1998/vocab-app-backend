@@ -32,6 +32,7 @@ import {
   SubmitQuizAnswerDto,
   WeakWordsQueryDto,
   PaginationQueryDto,
+  ContributeVocabularyDto,
 } from './vocabulary.dto';
 import { UidAuthGuard } from '../user/uid-auth.guard';
 import { CurrentUser } from '../user/current-user.decorator';
@@ -180,6 +181,24 @@ export class VocabularyController {
       total,
       page,
       limit,
+      body: data,
+    };
+  }
+
+  @Post('contribute')
+  @UseGuards(UidAuthGuard)
+  async contribute(
+    @CurrentUser() user: User,
+    @Body() dto: ContributeVocabularyDto,
+  ) {
+    const data = await this.service.contributeWord(user.id, dto);
+    return {
+      statusCode: HttpStatus.CREATED,
+      success: true,
+      message: data.bonusGranted
+        ? `เพิ่มคำศัพท์สำเร็จ! คุณได้รับสิทธิ์ใช้งานฟรีเพิ่ม 7 วัน`
+        : `เพิ่มคำศัพท์สำเร็จ (${data.contributedWordsCount}/${data.contributionGoal})`,
+      total: null,
       body: data,
     };
   }

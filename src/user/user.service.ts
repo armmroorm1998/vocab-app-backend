@@ -1,9 +1,17 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './user.entity';
 import bcrypt from 'bcryptjs';
+
+// Contributing this many new words earns a temporary access extension
+const WORD_CONTRIBUTION_GOAL = 10;
+const WORD_CONTRIBUTION_BONUS_DAYS = 7;
+
+// Hitting the daily goal this many days in a row also earns an extension
+const GOAL_STREAK_INTERVAL_DAYS = 7;
+const GOAL_STREAK_BONUS_DAYS = 7;
 
 @Injectable()
 export class UserService {
@@ -161,5 +169,79 @@ export class UserService {
     if (!user) return undefined;
     user.uid = newUid;
     return this.userRepository.save(user);
+  }
+
+  /**
+   * Record one new-word contribution toward the free-access goal.
+   * Every WORD_CONTRIBUTION_GOAL words grants WORD_CONTRIBUTION_BONUS_DAYS
+   * of access, stacking on top of any remaining bonus time.
+   */
+  async recordWordContribution(userId: string): Promise<{
+    contributedWordsCount: number;
+    freeAccessUntil: Date | null;
+    bonusGranted: boolean;
+  }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const nextCount = user.contributedWordsCount + 1;
+    const bonusGranted = nextCount >= WORD_CONTRIBUTION_GOAL;
+
+    if (bonusGranted) {
+      const base =
+        user.freeAccessUntil && user.freeAccessUntil > new Date()
+          ? user.freeAccessUntil
+          : new Date();
+      user.freeAccessUntil = new Date(
+        base.getTime() + WORD_CONTRIBUTION_BONUS_DAYS * 24 * 60 * 60 * 1000,
+      );
+      user.contributedWordsCount = 0;
+    } else {
+      user.contributedWordsCount = nextCount;
+    }
+
+    await this.userRepository.save(user);
+    return {
+      contributedWordsCount: user.contributedWordsCount,
+      freeAccessUntil: user.freeAccessUntil,
+      bonusGranted,
+    };
+  }
+
+  /**
+   * Called whenever the user's daily-goal-met streak changes. Every
+   * GOAL_STREAK_INTERVAL_DAYS of consecutive goal-met days earns another
+   * bonus, stacking on the same freeAccessUntil pool as word contributions.
+   */
+  async recordGoalStreakProgress(
+    userId: string,
+    goalMetStreak: number,
+  ): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) return;
+
+    // A broken-and-restarted streak starts back at 1 — clear the previously
+    // rewarded milestone so the next run can earn a bonus again.
+    if (goalMetStreak <= 1) {
+      user.rewardedGoalStreak = 0;
+    }
+
+    const shouldReward =
+      goalMetStreak > 0 &&
+      goalMetStreak % GOAL_STREAK_INTERVAL_DAYS === 0 &&
+      goalMetStreak > user.rewardedGoalStreak;
+
+    if (shouldReward) {
+      const base =
+        user.freeAccessUntil && user.freeAccessUntil > new Date()
+          ? user.freeAccessUntil
+          : new Date();
+      user.freeAccessUntil = new Date(
+        base.getTime() + GOAL_STREAK_BONUS_DAYS * 24 * 60 * 60 * 1000,
+      );
+      user.rewardedGoalStreak = goalMetStreak;
+    }
+
+    await this.userRepository.save(user);
   }
 }

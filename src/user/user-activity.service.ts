@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserActivityLog } from './user-activity-log.entity';
+import { UserService } from './user.service';
 
 export const DAILY_GOAL = 10;
 
@@ -28,6 +29,7 @@ export class UserActivityService {
   constructor(
     @InjectRepository(UserActivityLog)
     private readonly repo: Repository<UserActivityLog>,
+    private readonly userService: UserService,
   ) {}
 
   async recordActivity(userId: string): Promise<void> {
@@ -36,18 +38,42 @@ export class UserActivityService {
       where: { user: { id: userId }, activityDate: date },
     });
 
+    let todayCount: number;
     if (existing) {
       existing.count += 1;
       await this.repo.save(existing);
-      return;
+      todayCount = existing.count;
+    } else {
+      const row = this.repo.create({
+        user: { id: userId } as UserActivityLog['user'],
+        activityDate: date,
+        count: 1,
+      });
+      await this.repo.save(row);
+      todayCount = row.count;
     }
 
-    const row = this.repo.create({
-      user: { id: userId } as UserActivityLog['user'],
-      activityDate: date,
-      count: 1,
+    // Check the streak bonus right when today's count crosses the goal —
+    // this fires exactly once per user per day.
+    if (todayCount === DAILY_GOAL) {
+      const streak = await this.computeGoalMetStreak(userId);
+      await this.userService.recordGoalStreakProgress(userId, streak);
+    }
+  }
+
+  private async computeGoalMetStreak(userId: string): Promise<number> {
+    const rows = await this.repo.find({
+      where: { user: { id: userId } },
     });
-    await this.repo.save(row);
+    const countByDate = new Map(rows.map((r) => [r.activityDate, r.count]));
+
+    let streak = 0;
+    let cursor = todayStr();
+    while ((countByDate.get(cursor) ?? 0) >= DAILY_GOAL) {
+      streak++;
+      cursor = addDays(cursor, -1);
+    }
+    return streak;
   }
 
   async getStreak(userId: string): Promise<StreakInfo> {
