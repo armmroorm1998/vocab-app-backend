@@ -7,6 +7,7 @@ import { VerbFormModule } from './verb-form/verb-form.module';
 import { CategoryModule } from './category/category.module';
 import { ConversationQuizModule } from './conversation-quiz/conversation-quiz.module';
 import { ScriptRunnerModule } from './script-runner/script-runner.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ScriptRunnerModule } from './script-runner/script-runner.module';
     CategoryModule,
     ConversationQuizModule,
     ScriptRunnerModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

@@ -27,4 +27,7 @@ export class User {
   // prevents re-granting the same milestone and resets when the streak breaks.
   @Column({ name: 'rewarded_goal_streak', type: 'int', default: 0 })
   rewardedGoalStreak: number;
+
+  @Column({ name: 'is_admin', type: 'boolean', default: false })
+  isAdmin: boolean;
 }

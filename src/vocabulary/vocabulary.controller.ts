@@ -35,6 +35,7 @@ import {
   ContributeVocabularyDto,
 } from './vocabulary.dto';
 import { UidAuthGuard } from '../user/uid-auth.guard';
+import { AdminGuard } from '../user/admin.guard';
 import { CurrentUser } from '../user/current-user.decorator';
 import { User } from '../user/user.entity';
 
@@ -216,6 +217,7 @@ export class VocabularyController {
   }
 
   @Post()
+  @UseGuards(AdminGuard)
   async create(@Body() dto: CreateVocabularyDto) {
     const data = await this.service.create(dto);
     return {
@@ -228,6 +230,7 @@ export class VocabularyController {
   }
 
   @Put(':id')
+  @UseGuards(AdminGuard)
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateVocabularyDto,
@@ -243,6 +246,7 @@ export class VocabularyController {
   }
 
   @Delete(':id')
+  @UseGuards(AdminGuard)
   async remove(@Param('id', ParseIntPipe) id: number) {
     await this.service.remove(id);
     return {
@@ -329,6 +333,7 @@ export class VocabularyController {
   }
 
   @Post('import/csv')
+  @UseGuards(AdminGuard)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),

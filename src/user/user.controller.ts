@@ -44,6 +44,7 @@ export class UserController {
         createdAt: user.createdAt,
         contributedWordsCount: user.contributedWordsCount,
         freeAccessUntil: user.freeAccessUntil,
+        isAdmin: user.isAdmin,
       },
     };
   }

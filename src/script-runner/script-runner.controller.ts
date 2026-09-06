@@ -1,8 +1,17 @@
-import { Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { RunScriptDto } from './script-runner.dto';
 import { ScriptRunnerService } from './script-runner.service';
+import { AdminGuard } from '../user/admin.guard';
 
 @Controller('scripts')
+@UseGuards(AdminGuard)
 export class ScriptRunnerController {
   constructor(private readonly service: ScriptRunnerService) {}
 

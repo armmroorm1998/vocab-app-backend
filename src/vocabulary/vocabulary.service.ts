@@ -13,7 +13,6 @@ import {
   Vocabulary,
   VocabularyExample,
   EPartOfSpeech,
-  ECefrLevel,
 } from './vocabulary.entity';
 import {
   CreateVocabularyDto,
@@ -26,18 +25,23 @@ import { Category } from '../category/category.entity';
 import { UserService } from '../user/user.service';
 
 const VALID_POS = Object.values(EPartOfSpeech) as string[];
-const VALID_LEVELS = Object.values(ECefrLevel) as string[];
 
 interface WordEnrichmentResult {
   valid: boolean;
   reason?: string;
   meaning_th?: string;
-  pronunciation_thai?: string;
   ipa?: string;
   part_of_speech?: string;
-  cefr_level?: string;
-  category?: string;
   example?: string;
+}
+
+interface DictionaryApiEntry {
+  phonetic?: string;
+  phonetics?: { text?: string }[];
+  meanings?: {
+    partOfSpeech?: string;
+    definitions?: { definition?: string; example?: string }[];
+  }[];
 }
 
 @Injectable()
@@ -417,8 +421,15 @@ export class VocabularyService {
   /**
    * User-contributed word flow:
    *   1. Reject if the word already exists in the DB.
-   *   2. Ask AI to validate it's a real English word and enrich all fields.
+   *   2. Validate it's a real English word and enrich it via free
+   *      dictionary + translation APIs (no paid AI quota involved) — if the
+   *      dictionary API is down, falls back to translation-only with
+   *      weaker validation rather than blocking the contribution entirely.
    *   3. Save it, then record progress toward the free-access bonus.
+   *
+   * category and cefrLevel are left null here — there's no free source for
+   * them — and get backfilled later by the existing `auto-categorize` /
+   * `auto-level` batch scripts.
    */
   async contributeWord(
     userId: string,
@@ -440,8 +451,7 @@ export class VocabularyService {
       throw new ConflictException(`คำว่า "${word}" มีอยู่ในระบบแล้ว`);
     }
 
-    const categories = await this.categoryRepo.find();
-    const enrichment = await this.enrichWordWithAi(word, categories);
+    const enrichment = await this.enrichWordWithDictionary(word);
 
     if (!enrichment.valid) {
       throw new BadRequestException(
@@ -451,7 +461,7 @@ export class VocabularyService {
 
     const meaning = String(enrichment.meaning_th ?? '').trim();
     if (!meaning) {
-      throw new BadRequestException('AI ไม่สามารถให้ความหมายของคำนี้ได้');
+      throw new BadRequestException('ไม่สามารถหาความหมายของคำนี้ได้');
     }
 
     const posRaw = String(enrichment.part_of_speech ?? '')
@@ -461,31 +471,13 @@ export class VocabularyService {
       ? (posRaw as EPartOfSpeech)
       : EPartOfSpeech.OTHER;
 
-    const levelRaw = String(enrichment.cefr_level ?? '')
-      .trim()
-      .toUpperCase();
-    const cefrLevel = VALID_LEVELS.includes(levelRaw)
-      ? (levelRaw as ECefrLevel)
-      : null;
-
-    const categoryName = String(enrichment.category ?? '')
-      .trim()
-      .toLowerCase();
-    const category =
-      categoryName && categoryName !== 'none'
-        ? (categories.find((c) => c.name.toLowerCase() === categoryName) ??
-          null)
-        : null;
-
     const vocab = this.repo.create({
       word,
       meaning,
-      pronunciationThai:
-        String(enrichment.pronunciation_thai ?? '').trim() || null,
+      pronunciationThai: null, // no free source for Thai phonetic reading
       ipa: String(enrichment.ipa ?? '').trim() || null,
       partOfSpeech,
-      cefrLevel,
-      ...(category ? { category } : {}),
+      cefrLevel: null,
     });
 
     const example = String(enrichment.example ?? '').trim();
@@ -505,95 +497,101 @@ export class VocabularyService {
     };
   }
 
-  private async enrichWordWithAi(
+  /**
+   * Free Dictionary API (api.dictionaryapi.dev) — no key, no quota.
+   * It's a hobby-run free service with no SLA, so on outage/error we
+   * degrade to translateOnlyFallback() instead of blocking the whole
+   * contribution — a real 404 (word genuinely not found) is the only
+   * case treated as invalid input.
+   */
+  private async enrichWordWithDictionary(
     word: string,
-    categories: Category[],
   ): Promise<WordEnrichmentResult> {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error('GEMINI_API_KEY is not set');
-      throw new ServiceUnavailableException(
-        'ระบบ AI ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่อีกครั้งภายหลัง',
-      );
-    }
-
-    const categoryList = categories
-      .map((c) => `- ${c.name}${c.nameTh ? ` (${c.nameTh})` : ''}`)
-      .join('\n');
-
-    const prompt = `You are an English dictionary and vocabulary expert.
-A user submitted the word/phrase: "${word}"
-
-Step 1: Decide if this is a genuine, real English word or common phrase (dictionary-valid). Reject gibberish, misspellings, non-English text, or offensive content.
-Step 2: If valid, provide its dictionary data.
-Step 3: Assign it to the SINGLE most fitting category from the list below — only if its primary meaning specifically belongs there, otherwise "none".
-
-Available categories (use the exact English name):
-${categoryList || '(none defined)'}
-
-Return ONLY a valid JSON object — no markdown, no explanation, no code fences.
-
-If NOT a valid English word:
-{"valid": false, "reason": "<short reason in Thai>"}
-
-If valid:
-{
-  "valid": true,
-  "meaning_th": "<Thai meaning>",
-  "pronunciation_thai": "<Thai phonetic reading>",
-  "ipa": "<IPA transcription with slashes>",
-  "part_of_speech": "<one of: noun, verb, adjective, adverb, preposition, conjunction, pronoun, phrase, other>",
-  "cefr_level": "<one of: A1, A2, B1, B2, C1, C2>",
-  "category": "<exact category name or none>",
-  "example": "<one natural example sentence using the word>"
-}`;
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      // Log the raw provider error server-side only — it can contain
-      // account/billing details that shouldn't reach the end user.
-      console.error(`Gemini API error ${response.status}: ${errText}`);
-      throw new ServiceUnavailableException(
-        'ระบบ AI ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่อีกครั้งภายหลัง',
-      );
-    }
-
-    const json = (await response.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error(
-        `Gemini returned no JSON object. Raw: ${rawText.slice(0, 300)}`,
-      );
-      throw new ServiceUnavailableException(
-        'ระบบ AI ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่อีกครั้งภายหลัง',
-      );
-    }
-
+    let response: Response | null = null;
     try {
-      return JSON.parse(jsonMatch[0]) as WordEnrichmentResult;
-    } catch {
-      console.error(
-        `Gemini returned invalid JSON: ${jsonMatch[0].slice(0, 300)}`,
+      response = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`,
+        { signal: AbortSignal.timeout(5000) },
       );
+    } catch (err) {
+      // Includes timeouts — a hanging/slow outage must fail fast so the
+      // fallback below still has time to run within the client's timeout.
+      console.error('Dictionary API request failed:', err);
+    }
+
+    if (response?.status === 404) {
+      return {
+        valid: false,
+        reason: `"${word}" ไม่ใช่คำศัพท์ภาษาอังกฤษที่ถูกต้อง`,
+      };
+    }
+
+    if (!response || !response.ok) {
+      if (response) console.error(`Dictionary API error ${response.status}`);
+      return this.translateOnlyFallback(word);
+    }
+
+    const entries = (await response.json()) as DictionaryApiEntry[];
+    const meaning = entries[0]?.meanings?.[0];
+    const definition = meaning?.definitions?.[0];
+    const englishMeaning = definition?.definition?.trim();
+
+    if (!englishMeaning) {
+      return { valid: false, reason: `ไม่พบความหมายของ "${word}"` };
+    }
+
+    const ipa = (
+      entries[0]?.phonetic || entries[0]?.phonetics?.find((p) => p.text)?.text
+    )
+      ?.trim()
+      .replace(/^\/|\/$/g, '');
+
+    const meaningTh = await this.translateToThai(englishMeaning);
+
+    return {
+      valid: true,
+      meaning_th: meaningTh || englishMeaning,
+      ipa: ipa || undefined,
+      part_of_speech: meaning?.partOfSpeech,
+      example: definition?.example,
+    };
+  }
+
+  /**
+   * Used when the dictionary lookup itself is unreachable — translates the
+   * word directly instead of its definition, and skips IPA/POS/example
+   * since there's no free source for those without the dictionary API.
+   * There's no way to confirm the word is genuinely English here (just the
+   * earlier format check), so contributions during a dictionary outage get
+   * weaker validation until it recovers.
+   */
+  private async translateOnlyFallback(
+    word: string,
+  ): Promise<WordEnrichmentResult> {
+    const meaningTh = await this.translateToThai(word);
+    if (!meaningTh) {
       throw new ServiceUnavailableException(
-        'ระบบ AI ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่อีกครั้งภายหลัง',
+        'ระบบตรวจสอบคำศัพท์ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่อีกครั้งภายหลัง',
       );
+    }
+    return { valid: true, meaning_th: meaningTh };
+  }
+
+  /** MyMemory free translation API — no key, ~5000 words/day anonymous quota. */
+  private async translateToThai(text: string): Promise<string | null> {
+    try {
+      const res = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|th`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (!res.ok) return null;
+      const json = (await res.json()) as {
+        responseData?: { translatedText?: string };
+      };
+      return json.responseData?.translatedText?.trim() || null;
+    } catch (err) {
+      console.error('Translation API request failed:', err);
+      return null;
     }
   }
 }

@@ -13,6 +13,9 @@ const WORD_CONTRIBUTION_BONUS_DAYS = 7;
 const GOAL_STREAK_INTERVAL_DAYS = 7;
 const GOAL_STREAK_BONUS_DAYS = 7;
 
+// Every new signup starts with this many days of free access
+const SIGNUP_TRIAL_DAYS = 15;
+
 @Injectable()
 export class UserService {
   constructor(
@@ -154,6 +157,9 @@ export class UserService {
       uid: finalUid,
       recoverKeyHash,
       displayName: displayName ?? undefined,
+      freeAccessUntil: new Date(
+        Date.now() + SIGNUP_TRIAL_DAYS * 24 * 60 * 60 * 1000,
+      ),
     });
     return this.userRepository.save(user);
   }

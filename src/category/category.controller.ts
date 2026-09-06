@@ -8,9 +8,11 @@ import {
   Param,
   ParseIntPipe,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './category.dto';
+import { AdminGuard } from '../user/admin.guard';
 
 @Controller('categories')
 export class CategoryController {
@@ -41,6 +43,7 @@ export class CategoryController {
   }
 
   @Post()
+  @UseGuards(AdminGuard)
   async create(@Body() dto: CreateCategoryDto) {
     const data = await this.service.create(dto);
     return {
@@ -53,6 +56,7 @@ export class CategoryController {
   }
 
   @Put(':id')
+  @UseGuards(AdminGuard)
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCategoryDto,
@@ -68,6 +72,7 @@ export class CategoryController {
   }
 
   @Delete(':id')
+  @UseGuards(AdminGuard)
   async remove(@Param('id', ParseIntPipe) id: number) {
     await this.service.remove(id);
     return {
