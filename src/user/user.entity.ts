@@ -18,7 +18,7 @@ export class User {
   // rows created before this column existed have no way to backfill it until
   // the user next recovers successfully (see UserService.recoverByRecoveryKey).
   @Index()
-  @Column({ name: 'recover_key_lookup', nullable: true })
+  @Column({ name: 'recover_key_lookup', type: 'varchar', nullable: true })
   recoverKeyLookup?: string | null;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
