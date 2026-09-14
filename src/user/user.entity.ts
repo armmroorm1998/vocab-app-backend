@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
 
 @Entity()
 export class User {
@@ -10,6 +10,16 @@ export class User {
 
   @Column()
   recoverKeyHash: string; // Hashed recover key
+
+  // Deterministic (non-secret-strength) hash of the recovery key used purely as
+  // an indexed lookup so /user/recover can find the candidate row directly
+  // instead of bcrypt-comparing against every user. recoverKeyHash above
+  // remains the actual credential check. Nullable/non-unique because legacy
+  // rows created before this column existed have no way to backfill it until
+  // the user next recovers successfully (see UserService.recoverByRecoveryKey).
+  @Index()
+  @Column({ name: 'recover_key_lookup', nullable: true })
+  recoverKeyLookup?: string | null;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;

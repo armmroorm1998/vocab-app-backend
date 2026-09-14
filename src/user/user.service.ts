@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { createHash } from 'crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -40,6 +41,15 @@ export class UserService {
     return key;
   }
 
+  /**
+   * Deterministic, indexable hash of a recovery key used only to find the
+   * candidate row quickly. Not a substitute for recoverKeyHash (bcrypt),
+   * which remains the actual credential check.
+   */
+  private hashRecoveryKeyForLookup(recoveryKey: string): string {
+    return createHash('sha256').update(recoveryKey).digest('hex');
+  }
+
   private generateDisplayName(): string {
     // Example: 2 uppercase letters + 3 digits, e.g. AB123
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -59,6 +69,7 @@ export class UserService {
     const recoveryKey = this.generateRecoveryKey();
     const SALT_ROUNDS = 12;
     const recoverKeyHash = await bcrypt.hash(recoveryKey, SALT_ROUNDS);
+    const recoverKeyLookup = this.hashRecoveryKeyForLookup(recoveryKey);
 
     // DEBUG LOG
     console.log('[REGISTER] recoveryKey:', recoveryKey);
@@ -71,7 +82,12 @@ export class UserService {
         : this.generateDisplayName();
 
     // Create user with generated uid and recoveryKeyHash
-    const user = await this.createUser(uid, recoverKeyHash, finalDisplayName);
+    const user = await this.createUser(
+      uid,
+      recoverKeyHash,
+      finalDisplayName,
+      recoverKeyLookup,
+    );
 
     return {
       user: {
@@ -90,24 +106,45 @@ export class UserService {
     | { success: true; user: any; raw_token: string; recovery_key: string }
     | { success: false; message: string }
   > {
-    const users = await this.userRepository
+    const lookup = this.hashRecoveryKeyForLookup(recoveryKey);
+    const selectColumns = [
+      'u.id',
+      'u.recoverKeyHash',
+      'u.recoverKeyLookup',
+      'u.uid',
+      'u.displayName',
+      'u.createdAt',
+    ];
+
+    // Fast path: indexed lookup by the deterministic hash, so we only ever
+    // bcrypt-compare a single candidate row instead of the whole table.
+    let matched: User | null = await this.userRepository
       .createQueryBuilder('u')
       .addSelect('u.recoverKeyHash')
-      .select([
-        'u.id',
-        'u.recoverKeyHash',
-        'u.uid',
-        'u.displayName',
-        'u.createdAt',
-      ])
-      .getMany();
+      .select(selectColumns)
+      .where('u.recoverKeyLookup = :lookup', { lookup })
+      .getOne();
 
-    let matched: User | null = null;
-    for (const u of users) {
-      const match = await bcrypt.compare(recoveryKey, u.recoverKeyHash);
-      if (match) {
-        matched = u;
-        break;
+    if (matched && !(await bcrypt.compare(recoveryKey, matched.recoverKeyHash))) {
+      matched = null;
+    }
+
+    // Slow path fallback: only for legacy rows created before recoverKeyLookup
+    // existed (recoverKeyHash is a one-way bcrypt hash, so those rows can't be
+    // backfilled up front — this shrinks over time as such users recover).
+    if (!matched) {
+      const legacyUsers = await this.userRepository
+        .createQueryBuilder('u')
+        .addSelect('u.recoverKeyHash')
+        .select(selectColumns)
+        .where('u.recoverKeyLookup IS NULL')
+        .getMany();
+
+      for (const u of legacyUsers) {
+        if (await bcrypt.compare(recoveryKey, u.recoverKeyHash)) {
+          matched = u;
+          break;
+        }
       }
     }
 
@@ -115,10 +152,12 @@ export class UserService {
       return { success: false, message: 'Invalid recovery key' };
     }
 
-    // Generate new token (uid)
+    // Generate new token (uid) and backfill the lookup hash if this was a
+    // legacy row, so future recoveries for this user take the fast path.
     const rawToken = this.generateToken();
     await this.userRepository.update(matched.id, {
       uid: rawToken,
+      recoverKeyLookup: matched.recoverKeyLookup ?? lookup,
     });
 
     return {
@@ -144,6 +183,7 @@ export class UserService {
     uid: string | undefined,
     recoverKeyHash: string,
     displayName?: string,
+    recoverKeyLookup?: string,
   ): Promise<User> {
     // If uid is not provided, generate a random one
     let finalUid = uid;
@@ -156,6 +196,7 @@ export class UserService {
     const user: User = this.userRepository.create({
       uid: finalUid,
       recoverKeyHash,
+      recoverKeyLookup: recoverKeyLookup ?? null,
       displayName: displayName ?? undefined,
       freeAccessUntil: new Date(
         Date.now() + SIGNUP_TRIAL_DAYS * 24 * 60 * 60 * 1000,
