@@ -8,6 +8,7 @@ import { CategoryModule } from './category/category.module';
 import { ConversationQuizModule } from './conversation-quiz/conversation-quiz.module';
 import { ScriptRunnerModule } from './script-runner/script-runner.module';
 import { AdminModule } from './admin/admin.module';
+import { ListeningModule } from './listening/listening.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AdminModule } from './admin/admin.module';
     ConversationQuizModule,
     ScriptRunnerModule,
     AdminModule,
+    ListeningModule,
   ],
 })
 export class AppModule {}

@@ -11,6 +11,7 @@ export const RUNNABLE_SCRIPTS = [
   'conversation:seed',
   'conversation:reset',
   'conversation:generate',
+  'listening:seed',
 ] as const;
 
 export type RunnableScript = (typeof RUNNABLE_SCRIPTS)[number];
