@@ -1,7 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ConversationQuizQueryDto } from './conversation-quiz.dto';
+import {
+  ConversationQuizQueryDto,
+  CreateConversationCategoryDto,
+  CreateConversationQuestionDto,
+  UpdateConversationCategoryDto,
+  UpdateConversationQuestionDto,
+} from './conversation-quiz.dto';
 import {
   ConversationQuizCategory,
   ConversationQuizDialogueLine,
@@ -9,9 +15,11 @@ import {
 } from './conversation-quiz.entity';
 
 export interface ConversationQuizCategoryResponse {
+  id: number;
   key: string;
   name: string;
   emoji: string | null;
+  displayOrder: number;
   totalQuestions: number;
 }
 
@@ -46,9 +54,11 @@ export class ConversationQuizService {
     });
 
     return categories.map((c) => ({
+      id: c.id,
       key: c.key,
       name: c.name,
       emoji: c.emoji,
+      displayOrder: c.displayOrder,
       totalQuestions: c.questions?.length ?? 0,
     }));
   }
@@ -113,5 +123,117 @@ export class ConversationQuizService {
       take: 1,
     });
     return list[0] ?? null;
+  }
+
+  async createCategory(
+    dto: CreateConversationCategoryDto,
+  ): Promise<ConversationQuizCategory> {
+    const category = this.categoryRepo.create({
+      key: dto.key,
+      name: dto.name,
+      emoji: dto.emoji ?? null,
+      displayOrder: dto.displayOrder ?? 0,
+    });
+    return this.categoryRepo.save(category);
+  }
+
+  async updateCategory(
+    id: number,
+    dto: UpdateConversationCategoryDto,
+  ): Promise<ConversationQuizCategory> {
+    const category = await this.categoryRepo.findOne({ where: { id } });
+    if (!category) {
+      throw new NotFoundException(`Conversation category #${id} not found`);
+    }
+    Object.assign(category, {
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.emoji !== undefined && { emoji: dto.emoji }),
+      ...(dto.displayOrder !== undefined && { displayOrder: dto.displayOrder }),
+    });
+    return this.categoryRepo.save(category);
+  }
+
+  async deleteCategory(id: number): Promise<void> {
+    const category = await this.categoryRepo.findOne({ where: { id } });
+    if (!category) {
+      throw new NotFoundException(`Conversation category #${id} not found`);
+    }
+    await this.categoryRepo.remove(category);
+  }
+
+  async createQuestion(
+    dto: CreateConversationQuestionDto,
+  ): Promise<ConversationQuizQuestion> {
+    const category = await this.categoryRepo.findOne({
+      where: { id: dto.categoryId },
+    });
+    if (!category) {
+      throw new NotFoundException(
+        `Conversation category #${dto.categoryId} not found`,
+      );
+    }
+    const question = this.questionRepo.create({
+      category,
+      speaker: dto.speaker ?? 'Interviewer',
+      prompt: dto.prompt,
+      choices: dto.choices,
+      correctAnswer: dto.correctAnswer,
+      naturalAnswer: dto.naturalAnswer,
+      choiceScores: dto.choiceScores ?? null,
+      dialogueLines: dto.dialogueLines ?? null,
+      orderIndex: dto.orderIndex ?? 0,
+    });
+    return this.questionRepo.save(question);
+  }
+
+  async updateQuestion(
+    id: number,
+    dto: UpdateConversationQuestionDto,
+  ): Promise<ConversationQuizQuestion> {
+    const question = await this.questionRepo.findOne({
+      where: { id },
+      relations: { category: true },
+    });
+    if (!question) {
+      throw new NotFoundException(`Conversation question #${id} not found`);
+    }
+
+    if (dto.categoryId !== undefined) {
+      const category = await this.categoryRepo.findOne({
+        where: { id: dto.categoryId },
+      });
+      if (!category) {
+        throw new NotFoundException(
+          `Conversation category #${dto.categoryId} not found`,
+        );
+      }
+      question.category = category;
+    }
+
+    Object.assign(question, {
+      ...(dto.speaker !== undefined && { speaker: dto.speaker }),
+      ...(dto.prompt !== undefined && { prompt: dto.prompt }),
+      ...(dto.choices !== undefined && { choices: dto.choices }),
+      ...(dto.correctAnswer !== undefined && {
+        correctAnswer: dto.correctAnswer,
+      }),
+      ...(dto.naturalAnswer !== undefined && {
+        naturalAnswer: dto.naturalAnswer,
+      }),
+      ...(dto.choiceScores !== undefined && { choiceScores: dto.choiceScores }),
+      ...(dto.dialogueLines !== undefined && {
+        dialogueLines: dto.dialogueLines,
+      }),
+      ...(dto.orderIndex !== undefined && { orderIndex: dto.orderIndex }),
+    });
+    return this.questionRepo.save(question);
+  }
+
+  async deleteQuestion(id: number): Promise<void> {
+    const question = await this.questionRepo.findOne({ where: { id } });
+    if (!question) {
+      throw new NotFoundException(`Conversation question #${id} not found`);
+    }
+    await this.questionRepo.remove(question);
   }
 }

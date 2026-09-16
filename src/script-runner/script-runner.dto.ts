@@ -9,9 +9,9 @@ export const RUNNABLE_SCRIPTS = [
   'vocab:generate',
   'fill:examples',
   'conversation:seed',
-  'conversation:reset',
   'conversation:generate',
   'listening:seed',
+  'listening:seed:lesson2',
 ] as const;
 
 export type RunnableScript = (typeof RUNNABLE_SCRIPTS)[number];

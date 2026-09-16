@@ -125,7 +125,10 @@ export class UserService {
       .where('u.recoverKeyLookup = :lookup', { lookup })
       .getOne();
 
-    if (matched && !(await bcrypt.compare(recoveryKey, matched.recoverKeyHash))) {
+    if (
+      matched &&
+      !(await bcrypt.compare(recoveryKey, matched.recoverKeyHash))
+    ) {
       matched = null;
     }
 

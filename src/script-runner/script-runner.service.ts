@@ -88,8 +88,6 @@ export class ScriptRunnerService {
         if (typeof dto.count === 'number') args.push(`--count=${dto.count}`);
         return args;
       }
-      case 'conversation:reset':
-        return dto.category ? [`--category=${dto.category}`] : [];
       default:
         return [];
     }
