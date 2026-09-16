@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(.env)",
+      "Write(.env)",
+      "Edit(backup-*.sql)",
+      "Write(backup-*.sql)",
+      "Edit(package-lock.json)",
+      "Write(package-lock.json)"
+    ]
+  }
+}
