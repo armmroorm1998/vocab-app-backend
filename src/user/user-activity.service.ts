@@ -76,6 +76,42 @@ export class UserActivityService {
     return streak;
   }
 
+  /**
+   * Current consecutive goal-met days for each user, for admin display.
+   * Counts from today if today's goal is met, otherwise from yesterday,
+   * so an in-progress day doesn't show the streak as broken.
+   */
+  async getGoalMetStreaks(userIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>(userIds.map((id) => [id, 0]));
+    if (userIds.length === 0) return result;
+
+    const rows: { userId: string; date: string }[] = await this.repo
+      .createQueryBuilder('l')
+      .select('l.user_id', 'userId')
+      .addSelect(`to_char(l.activity_date, 'YYYY-MM-DD')`, 'date')
+      .where('l.user_id IN (:...userIds)', { userIds })
+      .andWhere('l.count >= :goal', { goal: DAILY_GOAL })
+      .getRawMany();
+
+    const datesByUser = new Map<string, Set<string>>();
+    for (const r of rows) {
+      if (!datesByUser.has(r.userId)) datesByUser.set(r.userId, new Set());
+      datesByUser.get(r.userId)!.add(r.date);
+    }
+
+    const today = todayStr();
+    for (const [userId, dates] of datesByUser) {
+      let streak = 0;
+      let cursor = dates.has(today) ? today : addDays(today, -1);
+      while (dates.has(cursor)) {
+        streak++;
+        cursor = addDays(cursor, -1);
+      }
+      result.set(userId, streak);
+    }
+    return result;
+  }
+
   async getStreak(userId: string): Promise<StreakInfo> {
     const rows = await this.repo.find({
       where: { user: { id: userId } },
