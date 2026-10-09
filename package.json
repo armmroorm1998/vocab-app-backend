@@ -31,7 +31,11 @@
     "conversation:generate:ai": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/conversation-quiz/generate-conversations-ai.script.ts",
     "conversation:backfill-scores": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/conversation-quiz/backfill-choice-scores.script.ts",
     "listening:seed": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/listening/seed-listening.script.ts",
-    "listening:seed:lesson2": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/listening/seed-listening-lesson2.script.ts"
+    "listening:seed:lesson2": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/listening/seed-listening-lesson2.script.ts",
+    "listening:seed:lesson3": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/listening/seed-listening-lesson3.script.ts",
+    "listening:seed:lesson4": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/listening/seed-listening-lesson4.script.ts",
+    "listening:seed:lesson5": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/listening/seed-listening-lesson5.script.ts",
+    "listening:seed:lesson6": "ts-node --project tsconfig.seed.json -r tsconfig-paths/register src/listening/seed-listening-lesson6.script.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
